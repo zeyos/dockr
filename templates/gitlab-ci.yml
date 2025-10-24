@@ -1,0 +1,85 @@
+stages:
+  - build
+  - deploy
+
+build only:
+  tags:
+    - docker
+  except:
+    refs:
+      - develop
+      - master
+      - tags
+  stage: build
+  script:
+    - docker build --tag ui-server:build-$CI_JOB_ID --build-arg CI_JOB_ID=$CI_JOB_ID --build-arg SENTRY_DSN=$SENTRY_DSN --build-arg GA_TRACKER_ID=$GA_TRACKER_ID .
+    - cd deploy
+    - docker build --tag nginx-server:build-$CI_JOB_ID --build-arg CI_JOB_ID=$CI_JOB_ID .
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+
+
+build images:
+  tags:
+    - docker
+  only:
+    refs:
+      - develop
+      - master
+      - tags
+  stage: build
+  script:
+    - echo $CI_JOB_TOKEN | docker login -u gitlab-ci-token --password-stdin  $CI_REGISTRY
+    - docker build --pull --progress plain -t $CI_REGISTRY_IMAGE:$CI_PIPELINE_ID -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG --build-arg CI_JOB_ID=$CI_JOB_ID  --build-arg SENTRY_DSN=$SENTRY_DSN --build-arg GA_TRACKER_ID=$GA_TRACKER_ID --build-arg VERSION_ID=$VERSION_ID --build-arg NPM_TOKEN=$NPM_TOKEN .
+    - docker build --pull --progress plain -t $CI_REGISTRY_IMAGE/nginx:$CI_PIPELINE_ID -t $CI_REGISTRY_IMAGE/nginx:$CI_COMMIT_REF_SLUG --build-arg CI_JOB_ID=$CI_JOB_ID  --build-arg SENTRY_DSN=$SENTRY_DSN --build-arg GA_TRACKER_ID=$GA_TRACKER_ID --build-arg VERSION_ID=$VERSION_ID --build-arg NPM_TOKEN=$NPM_TOKEN ./deploy
+    - docker push $CI_REGISTRY_IMAGE:$CI_PIPELINE_ID --quiet
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG --quiet
+    - docker push $CI_REGISTRY_IMAGE/nginx:$CI_PIPELINE_ID --quiet
+    - docker push $CI_REGISTRY_IMAGE/nginx:$CI_COMMIT_REF_SLUG --quiet
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+
+
+.deploy_script:
+  image: docker/compose
+  tags:
+    - docker
+  stage: deploy
+  script:
+    - cd deploy
+    - rm -rf $DOCKER_CERT_PATH
+    - mkdir -p $DOCKER_CERT_PATH
+    - echo "$CA_PEM" > $DOCKER_CERT_PATH/ca.pem
+    - echo "$CERT_PEM" > $DOCKER_CERT_PATH/cert.pem
+    - echo "$KEY_PEM" > $DOCKER_CERT_PATH/key.pem
+    - echo $CI_JOB_TOKEN | docker login -u gitlab-ci-token --password-stdin  $CI_REGISTRY
+    - docker-compose -f docker-compose.yml pull --quiet
+    - docker-compose -f docker-compose.yml up -d --remove-orphans --quiet-pull --no-color
+    - docker image prune --force
+    - rm -rf $DOCKER_CERT_PATH
+  variables:
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: /tmp/docker-machine-certs/$CI_PIPELINE_IID
+    DEPLOYMENT_ID: $CI_PROJECT_PATH_SLUG-$CI_COMMIT_REF_SLUG@$CI_PIPELINE_IID
+
+
+deploy stage:
+  extends: .deploy_script
+  only:
+    - develop
+  environment:
+    name: stage
+  variables:
+    DOCKER_HOST: tcp://49.13.127.56:2376
+    DOCKER_MACHINE_NAME: flemming-dentadesk-dev
+
+
+# deploy production:
+#   extends: .deploy_script
+#   only:
+#     - master
+#   environment:
+#     name: production
+#   variables:
+#     DOCKER_HOST: tcp://18.158.238.81:2376
+#     DOCKER_MACHINE_NAME: dentadesk-dentaurum-prod

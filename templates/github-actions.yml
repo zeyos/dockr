@@ -1,0 +1,47 @@
+name: dockr-deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_HOST: ${{ secrets.DOCKER_HOST }}
+      DOCKER_TLS_VERIFY: 1
+      DOCKER_CERT_PATH: ${{ runner.temp }}/docker-certs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq shellcheck
+
+      - name: Install dockr
+        run: sudo install -m 755 bin/dockr /usr/local/bin/dockr
+
+      - name: Materialize Docker TLS certificates
+        run: |
+          mkdir -p "$DOCKER_CERT_PATH"
+          printf '%s' "${{ secrets.CA_PEM }}" >"$DOCKER_CERT_PATH/ca.pem"
+          printf '%s' "${{ secrets.CERT_PEM }}" >"$DOCKER_CERT_PATH/cert.pem"
+          printf '%s' "${{ secrets.KEY_PEM }}" >"$DOCKER_CERT_PATH/key.pem"
+
+      - name: Health check
+        run: dockr health --json
+
+      - name: Deploy stack
+        run: |
+          sudo dockr deploy up \
+            --compose-file deploy/docker-compose.yml \
+            --project ${{ github.ref_name }} \
+            --pull
+
+      - name: Cleanup certificates
+        if: always()
+        run: rm -rf "$DOCKER_CERT_PATH"

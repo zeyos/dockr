@@ -1,0 +1,28 @@
+# General temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# macOS artifacts
+.DS_Store
+
+# Editor and IDE settings
+.idea/
+.vscode/
+*.code-workspace
+
+# Python virtual environments
+.venv/
+venv/
+
+# Local caches and build output
+.cache/
+coverage/
+
+# TLS bundles or backups that should never be committed
+*.pem
+*.key
+*.crt
+*.tar.gz

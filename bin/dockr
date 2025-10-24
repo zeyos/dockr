@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+DOCKR_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+export DOCKR_ROOT
+
+LIB_DIR="$DOCKR_ROOT/lib"
+COMMAND_DIR="$DOCKR_ROOT/commands"
+TEMPLATE_DIR="$DOCKR_ROOT/templates"
+PROVIDERS_DIR="$DOCKR_ROOT/providers"
+export TEMPLATE_DIR PROVIDERS_DIR
+
+source "$LIB_DIR/log.sh"
+source "$LIB_DIR/common.sh"
+source "$LIB_DIR/packages.sh"
+source "$LIB_DIR/systemd.sh"
+source "$LIB_DIR/docker.sh"
+source "$LIB_DIR/profile.sh"
+source "$LIB_DIR/firewall.sh"
+source "$LIB_DIR/sshkeymgr.sh"
+source "$LIB_DIR/cli.sh"
+source "$LIB_DIR/template.sh"
+source "$LIB_DIR/traefik.sh"
+source "$LIB_DIR/routes.sh"
+source "$LIB_DIR/deploy.sh"
+
+DOCKR_ASSUME_YES=${DOCKR_ASSUME_YES:-0}
+DOCKR_OUTPUT_FORMAT=${DOCKR_OUTPUT_FORMAT:-text}
+DOCKR_LOG_LEVEL=${DOCKR_LOG_LEVEL:-info}
+
+if [[ $# -eq 0 ]]; then
+  print_global_help
+  exit 1
+fi
+
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -y|--yes)
+      DOCKR_ASSUME_YES=1
+      shift
+      ;;
+    --json)
+      DOCKR_OUTPUT_FORMAT=json
+      shift
+      ;;
+    --debug)
+      DOCKR_LOG_LEVEL=debug
+      shift
+      ;;
+    -h|--help)
+      print_global_help
+      exit 0
+      ;;
+    init|cert|traefik|route|deploy|health)
+      break
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      log_error "Unknown global option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+if [[ $# -eq 0 ]]; then
+  log_error "Missing command"
+  print_global_help
+  exit 1
+fi
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+  init)
+    source "$COMMAND_DIR/init.sh"
+    dockr_cmd_init "$@"
+    ;;
+  cert)
+    source "$COMMAND_DIR/cert.sh"
+    dockr_cmd_cert "$@"
+    ;;
+  traefik)
+    source "$COMMAND_DIR/traefik.sh"
+    dockr_cmd_traefik "$@"
+    ;;
+  route)
+    source "$COMMAND_DIR/route.sh"
+    dockr_cmd_route "$@"
+    ;;
+  deploy)
+    source "$COMMAND_DIR/deploy.sh"
+    dockr_cmd_deploy "$@"
+    ;;
+  health)
+    source "$COMMAND_DIR/health.sh"
+    dockr_cmd_health "$@"
+    ;;
+  *)
+    log_error "Unknown command: $COMMAND"
+    exit 1
+    ;;
+ esac
